@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">BluetoothChat</string>
+    <string name="send">Send</string>
+    <string name="connect">connect</string>
+    <string name="discoverable">discoverable</string>
+    <string name="not_connected">Not Connected</string>
+</resources>
