@@ -5,8 +5,9 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
+import android.os.Bundle;
 import android.os.Handler;
-import android.support.v4.app.INotificationSideChannel;
+import android.os.Message;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -87,11 +88,24 @@ public class BluetoothChatService {
         return mState;
     }
 
-    public synchronized int start() {
+    public synchronized void start() {
         // Cancel any thread attempting to make a connection
         if (connectThread != null) {
             connectThread.cancel();
+            connectThread = null;
         }
+        // Cancel any thread currently running a connection
+        if (connectedThread != null) {
+            connectedThread.cancel();
+            connectedThread = null;
+        }
+        // Start the thread to listen on a BluetoothServerSocket
+        if (acceptThread == null) {
+            acceptThread = new AcceptThread();
+            acceptThread.start();
+        }
+
+        setState(STATE_LISTEN);
     }
 
     /*
@@ -116,6 +130,104 @@ public class BluetoothChatService {
         connectThread = new ConnectThread(device);
         connectThread.start();
         setState(STATE_CONNECTING);
+    }
+
+    public synchronized void connected(BluetoothSocket socket, BluetoothDevice device) {
+        // Cancel the thread that completed the connection
+        if (connectThread != null) {
+            connectThread.cancel();
+            connectThread = null;
+        }
+
+        // Cancel any thread currently running a connection
+        if (connectedThread != null) {
+            connectedThread.cancel();
+            connectedThread = null;
+        }
+
+        // Cancel the accept thread because we only want to connect to one device
+        if (acceptThread != null) {
+            acceptThread.cancel();
+            acceptThread = null;
+        }
+
+        // Start the thread to manage the connection and perform transmissions
+        connectedThread = new ConnectedThread(socket);
+        connectedThread.start();
+
+        // Send the name of the connected device back to the UI Activity
+        Message msg = mHandler.obtainMessage(BluetoothChat.MESSAGE_DEVICE_NAME);
+        Bundle bundle = new Bundle();
+        bundle.putString(BluetoothChat.DEVICE_NAME, device.getName());
+        msg.setData(bundle);
+        mHandler.sendMessage(msg);
+        setState(STATE_CONNECTED);
+    }
+
+    /**
+     * Stop all threads
+     */
+    public synchronized void stop() {
+        if (connectThread != null) {
+            connectThread.cancel();
+            connectThread = null;
+        }
+
+        if (connectedThread != null) {
+            connectedThread.cancel();
+            connectedThread = null;
+        }
+
+        if (acceptThread != null) {
+            acceptThread.cancel();
+            acceptThread = null;
+        }
+
+        setState(STATE_NONE);
+    }
+
+    /**
+     * Write to the ConnectedThread in an unsynchronized manner
+     *
+     * @param out The bytes to write
+     * @see ConnectedThread#write(byte[])
+     */
+    public void write(byte[] out) {
+        // Create temporary object
+        ConnectedThread r;
+        // Synchronize a copy of the ConnectedThread
+        synchronized (this) {
+            if (mState != STATE_CONNECTED) { return; }
+            r = connectedThread;
+        }
+        // Perform the write unsynchronized
+        r.write(out);
+    }
+
+    /**
+     * Indicate that the connection attempt failed and notify the UI Activity.
+     */
+    public void connectionFailed() {
+        setState(STATE_LISTEN);
+
+        Message msg = mHandler.obtainMessage(BluetoothChat.MESSAGE_TOAST);
+        Bundle bundle = new Bundle();
+        bundle.putString(BluetoothChat.TOAST, "Unable to connect device");
+        msg.setData(bundle);
+        mHandler.sendMessage(msg);
+    }
+
+    /**
+     * Indicate that the connection was lost and notify the UI Activity.
+     */
+    public void connectionLost() {
+        setState(STATE_LISTEN);
+
+        Message msg = mHandler.obtainMessage(BluetoothChat.MESSAGE_TOAST);
+        Bundle bundle = new Bundle();
+        bundle.putString(BluetoothChat.TOAST, "Device connection was lost");
+        msg.setData(bundle);
+        mHandler.sendMessage(msg);
     }
 
     /**
@@ -264,7 +376,7 @@ public class BluetoothChatService {
         public void run() {
             byte[] buffer = new byte[1024];
             int bytes;
-            // Keep listening to the inputstream while connected
+            // Keep listening to the InputSsstream while connected
             while (true) {
                 try {
                     // Read from the InputStream

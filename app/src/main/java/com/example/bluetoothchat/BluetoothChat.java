@@ -25,6 +25,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
 import java.util.List;
 
+// import androidRecyclerView.MessageAdapter;
+
+
 public class BluetoothChat extends Activity {
 
     // Message types sent from the BluetoothChatService Handler
@@ -60,7 +63,7 @@ public class BluetoothChat extends Activity {
     private LinearLayoutManager mLayoutManager;
     private MessageAdapter mAdapter;
 
-    public int count = 0;
+    public int counter = 0;
 
     private List messageList = new ArrayList();
 
@@ -199,14 +202,14 @@ public class BluetoothChat extends Activity {
                     // construct a string from the buffer
                     String writeMessage = new String(writeBuf);
                     mAdapter.notifyDataSetChanged();
-                    messageList.add(new androidRecycler.Message(counter++, writeMessage, "Me"));
+                    messageList.add(new androidRecyclerView.Message(counter++, writeMessage, "Me"));
                     break;
                 case MESSAGE_READ:
                     byte[] readBuf = (byte[]) msg.obj;
                     // construct a string from the valid bytes in the buffer
                     String readMessage = new String(readBuf, 0, msg.arg1);
                     mAdapter.notifyDataSetChanged();
-                    messageList.add(new androidRecycler.Message(counter++, readMessage, mConnectedDeviceName));
+                    messageList.add(new androidRecyclerView.Message(counter++, readMessage, mConnectedDeviceName));
 
                 case MESSAGE_DEVICE_NAME:
                     // save the connected device's name
